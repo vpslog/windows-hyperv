@@ -24,6 +24,29 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\scripts\New-Win11HyperV.ps1 -WindowsIsoPath "D:\iso\Win11.iso"
 ```
 
+如果虚拟机已经创建失败，需要先删除旧虚拟机，或换一个新的 `-VmName`：
+
+```powershell
+Stop-VM -Name Win11-Auto -TurnOff -ErrorAction SilentlyContinue
+Remove-VM -Name Win11-Auto -Force
+```
+
+如果 Hyper-V UEFI 页面显示 `The boot loader failed`，先运行预检：
+
+```powershell
+.\scripts\Test-Win11HyperVPrereq.ps1 -WindowsIsoPath ".\win11.iso"
+```
+
+重点看这几项：
+
+- `ISO UEFI boot file` 必须为 `[OK]`，否则这个 ISO 不能作为第 2 代 UEFI 虚拟机启动盘。
+- `ISO install image` 必须为 `[OK]`，否则它不是标准 Windows 安装 ISO。
+- 如果上面都通过，但仍然启动失败，可能是 ISO 的启动文件不能通过安全启动校验，可以关闭 Secure Boot 重试：
+
+```powershell
+.\scripts\New-Win11HyperV.ps1 -DisableSecureBoot
+```
+
 如果安装过程停在系统版本选择页面，可以先查看 ISO 内的镜像索引，再指定正确的索引重新运行：
 
 ```powershell

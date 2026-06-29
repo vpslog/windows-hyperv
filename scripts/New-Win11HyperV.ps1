@@ -10,7 +10,8 @@ param(
     [int64]$VhdSizeBytes = 80GB,
     [int]$ImageIndex = 6,
     [string]$AdminUser = "admin",
-    [string]$AdminPassword = "admin"
+    [string]$AdminPassword = "admin",
+    [switch]$DisableSecureBoot
 )
 
 Set-StrictMode -Version Latest
@@ -299,7 +300,12 @@ New-VHD -Path $vhdPath -SizeBytes $VhdSizeBytes -Dynamic | Out-Null
 New-VM -Name $VmName -Generation 2 -MemoryStartupBytes $MemoryStartupBytes -VHDPath $vhdPath -Path $vmPath -SwitchName $SwitchName | Out-Null
 Set-VM -Name $VmName -ProcessorCount $ProcessorCount -CheckpointType Disabled -AutomaticCheckpointsEnabled $false
 Set-VMMemory -VMName $VmName -DynamicMemoryEnabled $true -MinimumBytes 2GB -StartupBytes $MemoryStartupBytes -MaximumBytes 8GB
-Set-VMFirmware -VMName $VmName -EnableSecureBoot On -SecureBootTemplate "MicrosoftWindows"
+if ($DisableSecureBoot) {
+    Set-VMFirmware -VMName $VmName -EnableSecureBoot Off
+}
+else {
+    Set-VMFirmware -VMName $VmName -EnableSecureBoot On -SecureBootTemplate "MicrosoftWindows"
+}
 
 try {
     Set-VMKeyProtector -VMName $VmName -NewLocalKeyProtector

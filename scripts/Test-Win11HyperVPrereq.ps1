@@ -122,6 +122,65 @@ function New-TestIsoImageFromFolder {
     [ComIStreamFileWriter]::WriteToFile($result.ImageStream, $DestinationIso)
 }
 
+function Test-WindowsIsoContent {
+    param([Parameter(Mandatory)][string]$ImagePath)
+
+    $diskImage = $null
+    $mountedHere = $false
+    try {
+        $diskImage = Mount-DiskImage -ImagePath $ImagePath -PassThru
+        $mountedHere = $true
+        Start-Sleep -Milliseconds 500
+        $volume = $diskImage | Get-Volume
+        if (-not $volume -or -not $volume.DriveLetter) {
+            Write-CheckResult -Name "ISO mount drive letter" -Passed $false
+            return $false
+        }
+
+        $driveRoot = "$($volume.DriveLetter):\"
+        $uefiBoot = Join-Path $driveRoot "efi\boot\bootx64.efi"
+        $biosBoot = Join-Path $driveRoot "boot\etfsboot.com"
+        $wimPath = Join-Path $driveRoot "sources\install.wim"
+        $esdPath = Join-Path $driveRoot "sources\install.esd"
+
+        $hasUefiBoot = Test-Path -LiteralPath $uefiBoot
+        $hasBiosBoot = Test-Path -LiteralPath $biosBoot
+        $hasInstallImage = (Test-Path -LiteralPath $wimPath) -or (Test-Path -LiteralPath $esdPath)
+
+        Write-CheckResult -Name "ISO UEFI boot file" -Passed $hasUefiBoot -Detail "efi\boot\bootx64.efi"
+        Write-CheckResult -Name "ISO BIOS boot file" -Passed $hasBiosBoot -Detail "boot\etfsboot.com"
+        Write-CheckResult -Name "ISO install image" -Passed $hasInstallImage -Detail "sources\install.wim/esd"
+
+        if ($hasInstallImage) {
+            $installImagePath = $wimPath
+            if (-not (Test-Path -LiteralPath $installImagePath)) {
+                $installImagePath = $esdPath
+            }
+
+            try {
+                $images = Get-WindowsImage -ImagePath $installImagePath | Select-Object ImageIndex, ImageName
+                Write-Host "Windows image indexes:" -ForegroundColor Cyan
+                $images | Format-Table -AutoSize
+            }
+            catch {
+                Write-CheckResult -Name "Read Windows image indexes" -Passed $false -Detail $_.Exception.Message
+                return $false
+            }
+        }
+
+        return ($hasUefiBoot -and $hasInstallImage)
+    }
+    catch {
+        Write-CheckResult -Name "Inspect Windows ISO content" -Passed $false -Detail $_.Exception.Message
+        return $false
+    }
+    finally {
+        if ($mountedHere) {
+            Dismount-DiskImage -ImagePath $ImagePath -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+}
+
 $failed = $false
 $WindowsIsoPath = Resolve-FullPath $WindowsIsoPath
 
@@ -132,6 +191,11 @@ $failed = $failed -or (-not $isAdmin)
 $isoExists = Test-Path -LiteralPath $WindowsIsoPath
 Write-CheckResult -Name "Windows ISO" -Passed $isoExists -Detail $WindowsIsoPath
 $failed = $failed -or (-not $isoExists)
+
+if ($isoExists) {
+    $isoContentOk = Test-WindowsIsoContent -ImagePath $WindowsIsoPath
+    $failed = $failed -or (-not $isoContentOk)
+}
 
 $hasHyperV = [bool](Get-Command New-VM -ErrorAction SilentlyContinue)
 Write-CheckResult -Name "Hyper-V PowerShell module" -Passed $hasHyperV
