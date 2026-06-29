@@ -11,6 +11,11 @@ param(
     [int]$ImageIndex = 6,
     [string]$AdminUser = "admin",
     [string]$AdminPassword = "admin",
+    [string]$WindowsLanguage = "zh-CN",
+    [string]$InputLocale = "zh-CN",
+    [string]$SystemLocale = "zh-CN",
+    [string]$UserLocale = "zh-CN",
+    [string]$TimeZone = "China Standard Time",
     [switch]$UseNoPromptIso,
     [string]$OscdimgPath = "",
     [switch]$DownloadOscdimg,
@@ -169,12 +174,13 @@ $autounattend = @"
   <settings pass="windowsPE">
     <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
       <SetupUILanguage>
-        <UILanguage>en-US</UILanguage>
+        <UILanguage>$WindowsLanguage</UILanguage>
+        <WillShowUI>Never</WillShowUI>
       </SetupUILanguage>
-      <InputLocale>en-US</InputLocale>
-      <SystemLocale>en-US</SystemLocale>
-      <UILanguage>en-US</UILanguage>
-      <UserLocale>en-US</UserLocale>
+      <InputLocale>$InputLocale</InputLocale>
+      <SystemLocale>$SystemLocale</SystemLocale>
+      <UILanguage>$WindowsLanguage</UILanguage>
+      <UserLocale>$UserLocale</UserLocale>
     </component>
     <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
       <DiskConfiguration>
@@ -241,15 +247,15 @@ $autounattend = @"
   <settings pass="specialize">
     <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
       <ComputerName>*</ComputerName>
-      <TimeZone>China Standard Time</TimeZone>
+      <TimeZone>$TimeZone</TimeZone>
     </component>
   </settings>
   <settings pass="oobeSystem">
     <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-      <InputLocale>en-US</InputLocale>
-      <SystemLocale>en-US</SystemLocale>
-      <UILanguage>en-US</UILanguage>
-      <UserLocale>en-US</UserLocale>
+      <InputLocale>$InputLocale</InputLocale>
+      <SystemLocale>$SystemLocale</SystemLocale>
+      <UILanguage>$WindowsLanguage</UILanguage>
+      <UserLocale>$UserLocale</UserLocale>
     </component>
     <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
       <OOBE>
@@ -296,7 +302,9 @@ $autounattend = @"
 </unattend>
 "@
 
-Set-Content -LiteralPath (Join-Path $answerRoot "Autounattend.xml") -Value $autounattend -Encoding UTF8
+$autounattendPath = Join-Path $answerRoot "Autounattend.xml"
+Set-Content -LiteralPath $autounattendPath -Value $autounattend -Encoding UTF8
+[xml](Get-Content -LiteralPath $autounattendPath -Raw) | Out-Null
 New-IsoImageFromFolder -SourceFolder $answerRoot -DestinationIso $AnswerIsoPath
 
 if ($UseNoPromptIso) {

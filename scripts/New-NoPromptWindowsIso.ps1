@@ -5,6 +5,7 @@ param(
     [string]$ExtraFilesPath = "",
     [string]$OscdimgPath = "",
     [switch]$DownloadOscdimg,
+    [switch]$SkipBootWimUnattendInjection,
     [string]$OscdimgOutputPath = ".\out\tools\oscdimg.exe",
     [string[]]$OscdimgCabUrl = @(
         "https://download.microsoft.com/download/2/d/9/2d9c8902-3fcd-48a6-a22a-432b08bed61e/ADK/Installers/8ae6e3f2b02bc9aa4d16ce91ff65faf9.cab",
@@ -137,6 +138,68 @@ function Save-OscdimgOnly {
     throw "Could not extract oscdimg.exe from local ADK cache or configured CAB URLs."
 }
 
+function Add-UnattendToBootWim {
+    param(
+        [Parameter(Mandatory)][string]$BootWimPath,
+        [Parameter(Mandatory)][string]$UnattendPath,
+        [Parameter(Mandatory)][string]$WorkRoot
+    )
+
+    if (-not (Test-Path -LiteralPath $BootWimPath)) {
+        throw "boot.wim was not found: $BootWimPath"
+    }
+
+    $mountRoot = Join-Path $WorkRoot ("bootwim-mount-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $mountRoot -Force | Out-Null
+    attrib.exe -R $BootWimPath | Out-Null
+
+    $mounted = $false
+    try {
+        foreach ($index in @(1, 2)) {
+            Write-Host "Injecting unattend file into boot.wim index $index..."
+            $mountArgs = @(
+                "/Mount-Wim",
+                "/WimFile:$BootWimPath",
+                "/Index:$index",
+                "/MountDir:$mountRoot"
+            )
+            & dism.exe @mountArgs | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                throw "dism.exe failed to mount boot.wim index $index. Exit code: $LASTEXITCODE"
+            }
+            $mounted = $true
+
+            $pantherRoot = Join-Path $mountRoot "Windows\Panther"
+            $pantherUnattendRoot = Join-Path $pantherRoot "Unattend"
+            New-Item -ItemType Directory -Path $pantherUnattendRoot -Force | Out-Null
+            Copy-Item -LiteralPath $UnattendPath -Destination (Join-Path $pantherRoot "Unattend.xml") -Force
+            Copy-Item -LiteralPath $UnattendPath -Destination (Join-Path $pantherUnattendRoot "Unattend.xml") -Force
+
+            $commitArgs = @(
+                "/Unmount-Wim",
+                "/MountDir:$mountRoot",
+                "/Commit"
+            )
+            & dism.exe @commitArgs | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                throw "dism.exe failed to commit boot.wim index $index. Exit code: $LASTEXITCODE"
+            }
+            $mounted = $false
+        }
+    }
+    finally {
+        if ($mounted) {
+            $discardArgs = @(
+                "/Unmount-Wim",
+                "/MountDir:$mountRoot",
+                "/Discard"
+            )
+            & dism.exe @discardArgs | Out-Null
+        }
+        Remove-Item -LiteralPath $mountRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $WindowsIsoPath = Resolve-FullPath $WindowsIsoPath
 $OutputIsoPath = Resolve-FullPath $OutputIsoPath
 if ($ExtraFilesPath) {
@@ -192,6 +255,17 @@ try {
         & robocopy.exe $ExtraFilesPath $stagingRoot /E /NFL /NDL /NJH /NJS /NP | Out-Null
         if ($LASTEXITCODE -ge 8) {
             throw "robocopy.exe failed while adding extra files. Exit code: $LASTEXITCODE"
+        }
+
+        $autounattendPath = Join-Path $ExtraFilesPath "Autounattend.xml"
+        if (Test-Path -LiteralPath $autounattendPath) {
+            $sourcesRoot = Join-Path $stagingRoot "sources"
+            New-Item -ItemType Directory -Path $sourcesRoot -Force | Out-Null
+            Copy-Item -LiteralPath $autounattendPath -Destination (Join-Path $sourcesRoot "Autounattend.xml") -Force
+
+            if (-not $SkipBootWimUnattendInjection) {
+                Add-UnattendToBootWim -BootWimPath (Join-Path $sourcesRoot "boot.wim") -UnattendPath $autounattendPath -WorkRoot (Split-Path -Parent $OutputIsoPath)
+            }
         }
 
         $buildRoot = $stagingRoot

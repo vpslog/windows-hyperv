@@ -74,6 +74,18 @@ Remove-VM -Name Win11-Auto -Force
 
 使用 `New-Win11HyperV.ps1 -UseNoPromptIso` 时，脚本会先生成 `Autounattend.xml`，再把它和 `init\firstlogon.ps1` 直接合进 Windows 安装 ISO 根目录。这样 Windows Setup 一启动就能读取无人值守文件，不会停在语言选择页面。
 
+脚本默认按中文 Windows 11 ISO 设置语言区域：
+
+```powershell
+-WindowsLanguage zh-CN -InputLocale zh-CN -SystemLocale zh-CN -UserLocale zh-CN
+```
+
+如果你的 ISO 是英文版，请这样运行：
+
+```powershell
+.\scripts\New-Win11HyperV.ps1 -UseNoPromptIso -WindowsLanguage en-US -InputLocale en-US -SystemLocale en-US -UserLocale en-US
+```
+
 脚本会自动查找常见位置里的 `oscdimg.exe`，包括 `C:\ADK` 和 Windows Kits 目录。如果已经安装过 ADK Deployment Tools，通常不需要指定路径。
 
 如果脚本找不到，但你知道 `oscdimg.exe` 的位置，可以手动传入：
