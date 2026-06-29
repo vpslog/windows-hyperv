@@ -47,18 +47,31 @@ function New-IsoImageFromFolder {
 
     $result = $fsi.CreateResultImage()
     $stream = $result.ImageStream
+    $stat = New-Object System.Runtime.InteropServices.ComTypes.STATSTG
+    $stream.Stat([ref]$stat, 1)
+    $imageSize = [int64]$stat.cbSize
     $blockSize = 2048
     $buffer = New-Object byte[] $blockSize
+    $bytesReadPointer = [Runtime.InteropServices.Marshal]::AllocHGlobal(4)
     $writer = [IO.File]::Open($DestinationIso, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
 
     try {
-        for ($i = 0; $i -lt $stream.Size; $i += $blockSize) {
-            $read = $stream.Read($buffer, $blockSize)
+        $remaining = $imageSize
+        while ($remaining -gt 0) {
+            $bytesToRead = [Math]::Min($blockSize, $remaining)
+            [Runtime.InteropServices.Marshal]::WriteInt32($bytesReadPointer, 0)
+            $stream.Read($buffer, $bytesToRead, $bytesReadPointer)
+            $read = [Runtime.InteropServices.Marshal]::ReadInt32($bytesReadPointer)
+            if ($read -le 0) {
+                break
+            }
             $writer.Write($buffer, 0, $read)
+            $remaining -= $read
         }
     }
     finally {
         $writer.Dispose()
+        [Runtime.InteropServices.Marshal]::FreeHGlobal($bytesReadPointer)
     }
 }
 
