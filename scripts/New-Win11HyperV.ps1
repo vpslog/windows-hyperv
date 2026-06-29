@@ -144,6 +144,10 @@ $vmPath = Join-Path $VmRoot $VmName
 $vhdPath = Join-Path $vmPath "$VmName.vhdx"
 $escapedUser = ConvertTo-UnattendPlainText $AdminUser
 $escapedPassword = ConvertTo-UnattendPlainText $AdminPassword
+$createUserCommand = 'cmd.exe /c net user "' + $AdminUser + '" "' + $AdminPassword + '" /add'
+$addAdminCommand = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$g = Get-LocalGroup -SID ''S-1-5-32-544''; Add-LocalGroupMember -Group $g.Name -Member ''' + $AdminUser + '''"'
+$escapedCreateUserCommand = ConvertTo-UnattendPlainText $createUserCommand
+$escapedAddAdminCommand = ConvertTo-UnattendPlainText $addAdminCommand
 
 if (-not (Test-Path -LiteralPath $WindowsIsoPath)) {
     throw "Windows ISO was not found: $WindowsIsoPath"
@@ -254,6 +258,20 @@ $autounattend = @"
     </component>
   </settings>
   <settings pass="specialize">
+    <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Description>Create local admin user</Description>
+          <Path>$escapedCreateUserCommand</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Description>Add local admin user to Administrators</Description>
+          <Path>$escapedAddAdminCommand</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+    </component>
     <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
       <ComputerName>*</ComputerName>
       <TimeZone>$TimeZone</TimeZone>
@@ -276,22 +294,10 @@ $autounattend = @"
         <NetworkLocation>Private</NetworkLocation>
         <ProtectYourPC>3</ProtectYourPC>
       </OOBE>
-      <UserAccounts>
-        <LocalAccounts>
-          <LocalAccount wcm:action="add">
-            <Name>$escapedUser</Name>
-            <DisplayName>$escapedUser</DisplayName>
-            <Group>Administrators</Group>
-            <Password>
-              <Value>$escapedPassword</Value>
-              <PlainText>true</PlainText>
-            </Password>
-          </LocalAccount>
-        </LocalAccounts>
-      </UserAccounts>
       <AutoLogon>
         <Enabled>true</Enabled>
         <Username>$escapedUser</Username>
+        <Domain>.</Domain>
         <LogonCount>3</LogonCount>
         <Password>
           <Value>$escapedPassword</Value>
