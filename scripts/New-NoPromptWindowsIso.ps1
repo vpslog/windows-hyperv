@@ -258,10 +258,24 @@ try {
         }
 
         $autounattendPath = Join-Path $ExtraFilesPath "Autounattend.xml"
+        $oemRoot = Join-Path $ExtraFilesPath '$OEM$'
         if (Test-Path -LiteralPath $autounattendPath) {
             $sourcesRoot = Join-Path $stagingRoot "sources"
             New-Item -ItemType Directory -Path $sourcesRoot -Force | Out-Null
             Copy-Item -LiteralPath $autounattendPath -Destination (Join-Path $sourcesRoot "Autounattend.xml") -Force
+
+            if (Test-Path -LiteralPath $oemRoot) {
+                $sourcesOemRoot = Join-Path $sourcesRoot '$OEM$'
+                if (Test-Path -LiteralPath $sourcesOemRoot) {
+                    Remove-Item -LiteralPath $sourcesOemRoot -Recurse -Force
+                }
+                Copy-Item -LiteralPath $oemRoot -Destination $sourcesOemRoot -Recurse -Force
+
+                $rootOemCopy = Join-Path $stagingRoot '$OEM$'
+                if (Test-Path -LiteralPath $rootOemCopy) {
+                    Remove-Item -LiteralPath $rootOemCopy -Recurse -Force
+                }
+            }
 
             if (-not $SkipBootWimUnattendInjection) {
                 Add-UnattendToBootWim -BootWimPath (Join-Path $sourcesRoot "boot.wim") -UnattendPath $autounattendPath -WorkRoot (Split-Path -Parent $OutputIsoPath)

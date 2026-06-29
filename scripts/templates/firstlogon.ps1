@@ -8,9 +8,6 @@ try {
     Set-NetConnectionProfile -NetworkCategory Private -ErrorAction SilentlyContinue
     Enable-PSRemoting -Force -SkipNetworkProfileCheck
 
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ConsentPromptBehaviorAdmin" -Value 0 -Type DWord
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 0 -Type DWord
-
     powercfg /change monitor-timeout-ac 0
     powercfg /change standby-timeout-ac 0
     powercfg /change hibernate-timeout-ac 0

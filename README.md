@@ -120,6 +120,15 @@ Remove-VM -Name Win11-Auto -Force
 .\scripts\New-Win11HyperV.ps1 -UseNoPromptIso -ImageIndex 6 -ProductKey "VK7JG-NPHTM-C97JM-9MPGT-3V66T"
 ```
 
+如果 Windows 显示“Windows 无法完成安装”，不要继续猜配置。按 `Shift+F10` 打开命令行，查看这些日志：
+
+```cmd
+notepad C:\Windows\Panther\setuperr.log
+notepad C:\Windows\Panther\setupact.log
+notepad C:\Windows\Panther\UnattendGC\setuperr.log
+notepad C:\Windows\Panther\UnattendGC\setupact.log
+```
+
 脚本会创建：
 
 - 第 2 代 Hyper-V 虚拟机，并启用安全启动和 vTPM。

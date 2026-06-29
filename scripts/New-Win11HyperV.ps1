@@ -144,8 +144,6 @@ $vmPath = Join-Path $VmRoot $VmName
 $vhdPath = Join-Path $vmPath "$VmName.vhdx"
 $escapedUser = ConvertTo-UnattendPlainText $AdminUser
 $escapedPassword = ConvertTo-UnattendPlainText $AdminPassword
-$firstLogonCommand = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$s = Get-PSDrive -PSProvider FileSystem | ForEach-Object { Join-Path $_.Root ''init\firstlogon.ps1'' } | Where-Object { Test-Path $_ } | Select-Object -First 1; if ($s) { & $s }"'
-$escapedFirstLogonCommand = ConvertTo-UnattendPlainText $firstLogonCommand
 
 if (-not (Test-Path -LiteralPath $WindowsIsoPath)) {
     throw "Windows ISO was not found: $WindowsIsoPath"
@@ -166,8 +164,15 @@ if (Get-VM -Name $VmName -ErrorAction SilentlyContinue) {
 New-Item -ItemType Directory -Path $vmPath -Force | Out-Null
 New-Item -ItemType Directory -Path $answerRoot -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $answerRoot "init") -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $answerRoot '$OEM$\$$\Setup\Scripts') -Force | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "templates\firstlogon.ps1") -Destination (Join-Path $answerRoot "init\firstlogon.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot "templates\firstlogon.ps1") -Destination (Join-Path $answerRoot '$OEM$\$$\Setup\Scripts\setupcomplete.ps1') -Force
+Set-Content -LiteralPath (Join-Path $answerRoot '$OEM$\$$\Setup\Scripts\SetupComplete.cmd') -Encoding ASCII -Value @(
+    '@echo off',
+    'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%WINDIR%\Setup\Scripts\setupcomplete.ps1"',
+    'exit /b 0'
+)
 
 $autounattend = @"
 <?xml version="1.0" encoding="utf-8"?>
@@ -176,7 +181,6 @@ $autounattend = @"
     <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
       <SetupUILanguage>
         <UILanguage>$WindowsLanguage</UILanguage>
-        <WillShowUI>Never</WillShowUI>
       </SetupUILanguage>
       <InputLocale>$InputLocale</InputLocale>
       <SystemLocale>$SystemLocale</SystemLocale>
@@ -288,20 +292,12 @@ $autounattend = @"
       <AutoLogon>
         <Enabled>true</Enabled>
         <Username>$escapedUser</Username>
-        <LogonCount>999</LogonCount>
+        <LogonCount>3</LogonCount>
         <Password>
           <Value>$escapedPassword</Value>
           <PlainText>true</PlainText>
         </Password>
       </AutoLogon>
-      <FirstLogonCommands>
-        <SynchronousCommand wcm:action="add">
-          <Order>1</Order>
-          <Description>Run lab initialization</Description>
-          <CommandLine>$escapedFirstLogonCommand</CommandLine>
-          <RequiresUserInput>false</RequiresUserInput>
-        </SynchronousCommand>
-      </FirstLogonCommands>
     </component>
   </settings>
 </unattend>
