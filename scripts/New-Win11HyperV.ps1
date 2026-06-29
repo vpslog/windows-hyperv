@@ -9,6 +9,7 @@ param(
     [int]$ProcessorCount = 4,
     [int64]$VhdSizeBytes = 80GB,
     [int]$ImageIndex = 6,
+    [string]$ProductKey = "VK7JG-NPHTM-C97JM-9MPGT-3V66T",
     [string]$AdminUser = "admin",
     [string]$AdminPassword = "admin",
     [string]$WindowsLanguage = "zh-CN",
@@ -238,6 +239,10 @@ $autounattend = @"
         </OSImage>
       </ImageInstall>
       <UserData>
+        <ProductKey>
+          <Key>$ProductKey</Key>
+          <WillShowUI>Never</WillShowUI>
+        </ProductKey>
         <AcceptEula>true</AcceptEula>
         <FullName>$escapedUser</FullName>
         <Organization>Lab</Organization>

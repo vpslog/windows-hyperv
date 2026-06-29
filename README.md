@@ -9,6 +9,7 @@
 - 本地用户名：`admin`
 - 本地用户密码：`admin`
 - 自动登录：启用，登录用户为 `admin`
+- 安装密钥：默认使用 Windows 11 Pro 通用安装密钥，仅用于跳过安装阶段密钥页，不会激活系统
 
 请用管理员权限打开 PowerShell，然后运行：
 
@@ -111,6 +112,12 @@ Remove-VM -Name Win11-Auto -Force
 ```powershell
 .\scripts\Get-WindowsIsoImageIndex.ps1 -WindowsIsoPath ".\win11.iso"
 .\scripts\New-Win11HyperV.ps1 -ImageIndex 6
+```
+
+如果你安装的不是 Pro 版本，请同时指定对应版本的通用安装密钥，或传空值后手动处理：
+
+```powershell
+.\scripts\New-Win11HyperV.ps1 -UseNoPromptIso -ImageIndex 6 -ProductKey "VK7JG-NPHTM-C97JM-9MPGT-3V66T"
 ```
 
 脚本会创建：
