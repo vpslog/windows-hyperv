@@ -29,6 +29,75 @@ function Assert-Administrator {
     }
 }
 
+function Ensure-ComIStreamFileWriter {
+    if ("ComIStreamFileWriter" -as [type]) {
+        return
+    }
+
+    Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+
+public static class ComIStreamFileWriter
+{
+    public static void WriteToFile(object comStream, string path)
+    {
+        IntPtr unknown = IntPtr.Zero;
+        IntPtr streamPointer = IntPtr.Zero;
+        try
+        {
+            unknown = Marshal.GetIUnknownForObject(comStream);
+            Guid iid = typeof(IStream).GUID;
+            Marshal.ThrowExceptionForHR(Marshal.QueryInterface(unknown, ref iid, out streamPointer));
+            IStream stream = (IStream)Marshal.GetTypedObjectForIUnknown(streamPointer, typeof(IStream));
+
+            System.Runtime.InteropServices.ComTypes.STATSTG stat;
+            stream.Stat(out stat, 1);
+            long remaining = stat.cbSize;
+            byte[] buffer = new byte[2048];
+            IntPtr bytesReadPointer = Marshal.AllocHGlobal(sizeof(int));
+            try
+            {
+                using (FileStream file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    while (remaining > 0)
+                    {
+                        int bytesToRead = (int)Math.Min(buffer.Length, remaining);
+                        Marshal.WriteInt32(bytesReadPointer, 0);
+                        stream.Read(buffer, bytesToRead, bytesReadPointer);
+                        int bytesRead = Marshal.ReadInt32(bytesReadPointer);
+                        if (bytesRead <= 0)
+                        {
+                            break;
+                        }
+                        file.Write(buffer, 0, bytesRead);
+                        remaining -= bytesRead;
+                    }
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(bytesReadPointer);
+            }
+        }
+        finally
+        {
+            if (streamPointer != IntPtr.Zero)
+            {
+                Marshal.Release(streamPointer);
+            }
+            if (unknown != IntPtr.Zero)
+            {
+                Marshal.Release(unknown);
+            }
+        }
+    }
+}
+'@
+}
+
 function New-IsoImageFromFolder {
     param(
         [Parameter(Mandatory)][string]$SourceFolder,
@@ -45,34 +114,9 @@ function New-IsoImageFromFolder {
     $fsi.VolumeName = $VolumeName
     $fsi.Root.AddTree($SourceFolder, $false)
 
+    Ensure-ComIStreamFileWriter
     $result = $fsi.CreateResultImage()
-    $stream = $result.ImageStream
-    $stat = New-Object System.Runtime.InteropServices.ComTypes.STATSTG
-    $stream.Stat([ref]$stat, 1)
-    $imageSize = [int64]$stat.cbSize
-    $blockSize = 2048
-    $buffer = New-Object byte[] $blockSize
-    $bytesReadPointer = [Runtime.InteropServices.Marshal]::AllocHGlobal(4)
-    $writer = [IO.File]::Open($DestinationIso, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
-
-    try {
-        $remaining = $imageSize
-        while ($remaining -gt 0) {
-            $bytesToRead = [Math]::Min($blockSize, $remaining)
-            [Runtime.InteropServices.Marshal]::WriteInt32($bytesReadPointer, 0)
-            $stream.Read($buffer, $bytesToRead, $bytesReadPointer)
-            $read = [Runtime.InteropServices.Marshal]::ReadInt32($bytesReadPointer)
-            if ($read -le 0) {
-                break
-            }
-            $writer.Write($buffer, 0, $read)
-            $remaining -= $read
-        }
-    }
-    finally {
-        $writer.Dispose()
-        [Runtime.InteropServices.Marshal]::FreeHGlobal($bytesReadPointer)
-    }
+    [ComIStreamFileWriter]::WriteToFile($result.ImageStream, $DestinationIso)
 }
 
 function ConvertTo-UnattendPlainText {

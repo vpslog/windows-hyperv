@@ -14,6 +14,7 @@
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
+.\scripts\Test-Win11HyperVPrereq.ps1
 .\scripts\New-Win11HyperV.ps1
 ```
 
@@ -41,5 +42,6 @@ Windows 安装完成后，虚拟机应自动以 `admin` 用户登录，密码为
 注意事项：
 
 - 脚本默认使用 Hyper-V 的 `Default Switch`。如需使用其他虚拟交换机，请传入 `-SwitchName`。
+- `Test-Win11HyperVPrereq.ps1` 只做预检，不会创建虚拟机。它会检查管理员权限、Hyper-V PowerShell 模块、Windows ISO、虚拟交换机，以及当前系统是否能生成无人值守 ISO。
 - `admin/admin` 是为了本地实验环境方便使用而设置的弱密码。不要把该虚拟机直接暴露到不可信网络中。
 - 不同版本的 Windows 11 安装流程可能略有差异。如果安装暂停，请打开虚拟机控制台，检查是否在询问磁盘、网络或系统版本选择。
