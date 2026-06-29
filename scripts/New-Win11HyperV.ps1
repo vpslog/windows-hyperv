@@ -144,10 +144,32 @@ $vmPath = Join-Path $VmRoot $VmName
 $vhdPath = Join-Path $vmPath "$VmName.vhdx"
 $escapedUser = ConvertTo-UnattendPlainText $AdminUser
 $escapedPassword = ConvertTo-UnattendPlainText $AdminPassword
-$createUserCommand = 'cmd.exe /c net user "' + $AdminUser + '" "' + $AdminPassword + '" /add'
-$addAdminCommand = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$g = Get-LocalGroup -SID ''S-1-5-32-544''; Add-LocalGroupMember -Group $g.Name -Member ''' + $AdminUser + '''"'
-$escapedCreateUserCommand = ConvertTo-UnattendPlainText $createUserCommand
-$escapedAddAdminCommand = ConvertTo-UnattendPlainText $addAdminCommand
+$escapedProductKey = ConvertTo-UnattendPlainText $ProductKey
+
+if ($ProductKey) {
+    $installFromXml = ""
+    $productKeyXml = @"
+        <ProductKey>
+          <Key>$escapedProductKey</Key>
+          <WillShowUI>Never</WillShowUI>
+        </ProductKey>
+"@
+}
+else {
+    $installFromXml = @"
+          <InstallFrom>
+            <MetaData wcm:action="add">
+              <Key>/IMAGE/INDEX</Key>
+              <Value>$ImageIndex</Value>
+            </MetaData>
+          </InstallFrom>
+"@
+    $productKeyXml = @"
+        <ProductKey>
+          <WillShowUI>Never</WillShowUI>
+        </ProductKey>
+"@
+}
 
 if (-not (Test-Path -LiteralPath $WindowsIsoPath)) {
     throw "Windows ISO was not found: $WindowsIsoPath"
@@ -233,12 +255,7 @@ $autounattend = @"
       </DiskConfiguration>
       <ImageInstall>
         <OSImage>
-          <InstallFrom>
-            <MetaData wcm:action="add">
-              <Key>/IMAGE/INDEX</Key>
-              <Value>$ImageIndex</Value>
-            </MetaData>
-          </InstallFrom>
+$installFromXml
           <InstallTo>
             <DiskID>0</DiskID>
             <PartitionID>3</PartitionID>
@@ -247,10 +264,7 @@ $autounattend = @"
         </OSImage>
       </ImageInstall>
       <UserData>
-        <ProductKey>
-          <Key>$ProductKey</Key>
-          <WillShowUI>Never</WillShowUI>
-        </ProductKey>
+$productKeyXml
         <AcceptEula>true</AcceptEula>
         <FullName>$escapedUser</FullName>
         <Organization>Lab</Organization>
@@ -258,17 +272,14 @@ $autounattend = @"
     </component>
   </settings>
   <settings pass="specialize">
+    <component name="Microsoft-Windows-Security-SPP-UX" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <SkipAutoActivation>true</SkipAutoActivation>
+    </component>
     <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
       <RunSynchronous>
         <RunSynchronousCommand wcm:action="add">
           <Order>1</Order>
-          <Description>Create local admin user</Description>
-          <Path>$escapedCreateUserCommand</Path>
-        </RunSynchronousCommand>
-        <RunSynchronousCommand wcm:action="add">
-          <Order>2</Order>
-          <Description>Add local admin user to Administrators</Description>
-          <Path>$escapedAddAdminCommand</Path>
+          <Path>reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" /v BypassNRO /t REG_DWORD /d 1 /f</Path>
         </RunSynchronousCommand>
       </RunSynchronous>
     </component>
@@ -293,11 +304,28 @@ $autounattend = @"
         <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
         <NetworkLocation>Private</NetworkLocation>
         <ProtectYourPC>3</ProtectYourPC>
+        <SkipUserOOBE>true</SkipUserOOBE>
+        <SkipMachineOOBE>true</SkipMachineOOBE>
       </OOBE>
+      <UserAccounts>
+        <LocalAccounts>
+          <LocalAccount wcm:action="add">
+            <Name>$escapedUser</Name>
+            <Group>Administrators</Group>
+            <Password>
+              <Value>$escapedPassword</Value>
+              <PlainText>true</PlainText>
+            </Password>
+          </LocalAccount>
+        </LocalAccounts>
+        <AdministratorPassword>
+          <Value>$escapedPassword</Value>
+          <PlainText>true</PlainText>
+        </AdministratorPassword>
+      </UserAccounts>
       <AutoLogon>
         <Enabled>true</Enabled>
         <Username>$escapedUser</Username>
-        <Domain>.</Domain>
         <LogonCount>3</LogonCount>
         <Password>
           <Value>$escapedPassword</Value>
