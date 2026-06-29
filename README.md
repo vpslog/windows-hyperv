@@ -47,6 +47,12 @@ Remove-VM -Name Win11-Auto -Force
 .\scripts\New-Win11HyperV.ps1 -DisableSecureBoot
 ```
 
+如果虚拟机已经存在，也可以直接修复现有 VM 的启动设置并关闭 Secure Boot：
+
+```powershell
+.\scripts\Repair-Win11HyperVBoot.ps1 -VmName Win11-Auto -WindowsIsoPath ".\win11.iso" -DisableSecureBoot
+```
+
 如果安装过程停在系统版本选择页面，可以先查看 ISO 内的镜像索引，再指定正确的索引重新运行：
 
 ```powershell
