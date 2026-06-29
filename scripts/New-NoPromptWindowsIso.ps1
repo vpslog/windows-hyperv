@@ -3,6 +3,8 @@ param(
     [string]$WindowsIsoPath = ".\win11.iso",
     [string]$OutputIsoPath = ".\out\win11-noprompt.iso",
     [string]$OscdimgPath = "",
+    [string]$AdkDownloadUrl = "https://go.microsoft.com/fwlink/?linkid=2120254",
+    [string]$AdkInstallPath = "C:\ADK",
     [switch]$InstallAdkDeploymentTools
 )
 
@@ -31,6 +33,8 @@ function Find-Oscdimg {
     }
 
     $candidates = @(
+        "C:\ADK\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
+        "C:\ADK\Assessment and Deployment Kit\Deployment Tools\x86\Oscdimg\oscdimg.exe",
         "${env:ProgramFiles(x86)}\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
         "${env:ProgramFiles(x86)}\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\x86\Oscdimg\oscdimg.exe",
         "${env:ProgramFiles}\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
@@ -56,7 +60,8 @@ function Assert-Administrator {
 
 function Install-AdkDeploymentTools {
     param(
-        [string]$InstallPath = "$env:ProgramFiles\Windows Kits\10"
+        [Parameter(Mandatory)][string]$DownloadUrl,
+        [Parameter(Mandatory)][string]$InstallPath
     )
 
     Assert-Administrator
@@ -66,24 +71,33 @@ function Install-AdkDeploymentTools {
     New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
 
     if (-not (Test-Path -LiteralPath $installerPath)) {
-        $adkUrl = "https://go.microsoft.com/fwlink/?linkid=2289980"
         Write-Host "Downloading Windows ADK setup..."
-        Write-Host $adkUrl
-        Invoke-WebRequest -Uri $adkUrl -OutFile $installerPath -UseBasicParsing
+        Write-Host $DownloadUrl
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $installerPath -UseBasicParsing
     }
 
     Write-Host "Installing Windows ADK Deployment Tools..."
+    $logPath = Join-Path $downloadRoot "adksetup-install.log"
     $arguments = @(
-        "/quiet",
-        "/norestart",
         "/installpath",
         $InstallPath,
         "/features",
-        "OptionId.DeploymentTools"
+        "OptionId.DeploymentTools",
+        "/quiet",
+        "/norestart",
+        "/ceip",
+        "off",
+        "/log",
+        $logPath
     )
 
     $process = Start-Process -FilePath $installerPath -ArgumentList $arguments -Wait -PassThru
     if ($process.ExitCode -ne 0) {
+        Write-Host "ADK install log: $logPath"
+        if (Test-Path -LiteralPath $logPath) {
+            Write-Host "Last lines from ADK install log:"
+            Get-Content -LiteralPath $logPath -Tail 40
+        }
         throw "ADK Deployment Tools install failed with exit code $($process.ExitCode)."
     }
 }
@@ -98,7 +112,7 @@ catch {
         throw
     }
 
-    Install-AdkDeploymentTools
+    Install-AdkDeploymentTools -DownloadUrl $AdkDownloadUrl -InstallPath $AdkInstallPath
     $oscdimg = Find-Oscdimg -ExplicitPath $OscdimgPath
 }
 

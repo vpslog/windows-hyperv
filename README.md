@@ -78,6 +78,8 @@ Remove-VM -Name Win11-Auto -Force
 .\scripts\New-Win11HyperV.ps1 -UseNoPromptIso -InstallAdkDeploymentTools
 ```
 
+默认会把 ADK Deployment Tools 安装到 `C:\ADK`，并使用 Windows 10 2004 ADK 下载入口。只需要其中的 `oscdimg.exe`，不是完整安装所有 ADK 组件。
+
 修复现有 VM 时也可以自动安装：
 
 ```powershell
