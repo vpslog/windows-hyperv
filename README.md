@@ -53,6 +53,37 @@ Remove-VM -Name Win11-Auto -Force
 .\scripts\Repair-Win11HyperVBoot.ps1 -VmName Win11-Auto -WindowsIsoPath ".\win11.iso" -DisableSecureBoot
 ```
 
+如果仍然是 `The boot loader failed`，很可能是 Hyper-V Gen2 没接到 Windows ISO 的 `Press any key to boot from CD or DVD...`。这会影响无人值守启动。安装 Windows ADK 的 Deployment Tools 后，可以生成一个 no-prompt ISO：
+
+```powershell
+.\scripts\New-NoPromptWindowsIso.ps1 -WindowsIsoPath ".\win11.iso" -OutputIsoPath ".\out\win11-noprompt.iso"
+.\scripts\Repair-Win11HyperVBoot.ps1 -VmName Win11-Auto -WindowsIsoPath ".\out\win11-noprompt.iso" -DisableSecureBoot
+```
+
+也可以让修复脚本自动生成并挂载 no-prompt ISO：
+
+```powershell
+.\scripts\Repair-Win11HyperVBoot.ps1 -VmName Win11-Auto -WindowsIsoPath ".\win11.iso" -UseNoPromptIso -DisableSecureBoot
+```
+
+从头创建 VM 时也可以直接使用 no-prompt ISO：
+
+```powershell
+.\scripts\New-Win11HyperV.ps1 -UseNoPromptIso
+```
+
+如果本机没有 `oscdimg.exe`，脚本可以自动安装 ADK Deployment Tools 后再生成 no-prompt ISO。请在管理员 PowerShell 中运行：
+
+```powershell
+.\scripts\New-Win11HyperV.ps1 -UseNoPromptIso -InstallAdkDeploymentTools
+```
+
+修复现有 VM 时也可以自动安装：
+
+```powershell
+.\scripts\Repair-Win11HyperVBoot.ps1 -VmName Win11-Auto -WindowsIsoPath ".\win11.iso" -UseNoPromptIso -InstallAdkDeploymentTools
+```
+
 如果安装过程停在系统版本选择页面，可以先查看 ISO 内的镜像索引，再指定正确的索引重新运行：
 
 ```powershell

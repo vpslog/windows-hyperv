@@ -11,6 +11,8 @@ param(
     [int]$ImageIndex = 6,
     [string]$AdminUser = "admin",
     [string]$AdminPassword = "admin",
+    [switch]$UseNoPromptIso,
+    [switch]$InstallAdkDeploymentTools,
     [switch]$DisableSecureBoot
 )
 
@@ -140,6 +142,25 @@ $escapedFirstLogonCommand = ConvertTo-UnattendPlainText $firstLogonCommand
 
 if (-not (Test-Path -LiteralPath $WindowsIsoPath)) {
     throw "Windows ISO was not found: $WindowsIsoPath"
+}
+
+if ($UseNoPromptIso) {
+    $noPromptIsoPath = Join-Path (Split-Path -Parent $AnswerIsoPath) "win11-noprompt.iso"
+    $noPromptScript = Join-Path $PSScriptRoot "New-NoPromptWindowsIso.ps1"
+    if (-not (Test-Path -LiteralPath $noPromptScript)) {
+        throw "No-prompt ISO script was not found: $noPromptScript"
+    }
+
+    $noPromptArgs = @{
+        WindowsIsoPath = $WindowsIsoPath
+        OutputIsoPath = $noPromptIsoPath
+    }
+    if ($InstallAdkDeploymentTools) {
+        $noPromptArgs.InstallAdkDeploymentTools = $true
+    }
+
+    & $noPromptScript @noPromptArgs
+    $WindowsIsoPath = Resolve-FullPath $noPromptIsoPath
 }
 
 if (-not (Get-Command New-VM -ErrorAction SilentlyContinue)) {

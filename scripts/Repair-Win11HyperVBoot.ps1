@@ -2,6 +2,8 @@
 param(
     [string]$VmName = "Win11-Auto",
     [string]$WindowsIsoPath = ".\win11.iso",
+    [switch]$UseNoPromptIso,
+    [switch]$InstallAdkDeploymentTools,
     [switch]$DisableSecureBoot
 )
 
@@ -26,6 +28,25 @@ Assert-Administrator
 $WindowsIsoPath = Resolve-FullPath $WindowsIsoPath
 if (-not (Test-Path -LiteralPath $WindowsIsoPath)) {
     throw "Windows ISO was not found: $WindowsIsoPath"
+}
+
+if ($UseNoPromptIso) {
+    $noPromptIsoPath = Join-Path (Split-Path -Parent $WindowsIsoPath) "out\win11-noprompt.iso"
+    $noPromptScript = Join-Path $PSScriptRoot "New-NoPromptWindowsIso.ps1"
+    if (-not (Test-Path -LiteralPath $noPromptScript)) {
+        throw "No-prompt ISO script was not found: $noPromptScript"
+    }
+
+    $noPromptArgs = @{
+        WindowsIsoPath = $WindowsIsoPath
+        OutputIsoPath = $noPromptIsoPath
+    }
+    if ($InstallAdkDeploymentTools) {
+        $noPromptArgs.InstallAdkDeploymentTools = $true
+    }
+
+    & $noPromptScript @noPromptArgs
+    $WindowsIsoPath = Resolve-FullPath $noPromptIsoPath
 }
 
 $vm = Get-VM -Name $VmName -ErrorAction Stop
