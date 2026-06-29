@@ -2,10 +2,14 @@
 param(
     [string]$WindowsIsoPath = ".\win11.iso",
     [string]$OutputIsoPath = ".\out\win11-noprompt.iso",
+    [string]$ExtraFilesPath = "",
     [string]$OscdimgPath = "",
-    [string]$AdkDownloadUrl = "https://go.microsoft.com/fwlink/?linkid=2120254",
-    [string]$AdkInstallPath = "C:\ADK",
-    [switch]$InstallAdkDeploymentTools
+    [switch]$DownloadOscdimg,
+    [string]$OscdimgOutputPath = ".\out\tools\oscdimg.exe",
+    [string[]]$OscdimgCabUrl = @(
+        "https://download.microsoft.com/download/2/d/9/2d9c8902-3fcd-48a6-a22a-432b08bed61e/ADK/Installers/8ae6e3f2b02bc9aa4d16ce91ff65faf9.cab",
+        "https://download.microsoft.com/download/2/d/9/2d9c8902-3fcd-48a6-a22a-432b08bed61e/ADK/Installers/bf7b6300431984daf850cc213043c7eb.cab"
+    )
 )
 
 Set-StrictMode -Version Latest
@@ -33,6 +37,7 @@ function Find-Oscdimg {
     }
 
     $candidates = @(
+        (Resolve-FullPath ".\out\tools\oscdimg.exe"),
         "C:\ADK\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
         "C:\ADK\Assessment and Deployment Kit\Deployment Tools\x86\Oscdimg\oscdimg.exe",
         "${env:ProgramFiles(x86)}\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
@@ -47,73 +52,108 @@ function Find-Oscdimg {
         }
     }
 
-    throw "oscdimg.exe was not found. Install Windows ADK Deployment Tools, or pass -OscdimgPath."
+    throw "oscdimg.exe was not found. Add it to PATH, install Windows ADK Deployment Tools, or pass -OscdimgPath."
 }
 
-function Assert-Administrator {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
-    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        throw "Run this script from an elevated PowerShell session."
-    }
-}
-
-function Install-AdkDeploymentTools {
+function Expand-CabAndFindOscdimg {
     param(
-        [Parameter(Mandatory)][string]$DownloadUrl,
-        [Parameter(Mandatory)][string]$InstallPath
+        [Parameter(Mandatory)][string]$CabPath,
+        [Parameter(Mandatory)][string]$ExtractRoot
     )
 
-    Assert-Administrator
+    if (Test-Path -LiteralPath $ExtractRoot) {
+        Remove-Item -LiteralPath $ExtractRoot -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $ExtractRoot -Force | Out-Null
 
-    $downloadRoot = Join-Path $env:TEMP "win11-hyperv-adk"
-    $installerPath = Join-Path $downloadRoot "adksetup.exe"
+    & expand.exe -F:* $CabPath $ExtractRoot | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "expand.exe failed for CAB: $CabPath"
+    }
+
+    Get-ChildItem -LiteralPath $ExtractRoot -Recurse -Filter oscdimg.exe -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+}
+
+function Save-OscdimgOnly {
+    param(
+        [Parameter(Mandatory)][string]$DestinationPath,
+        [Parameter(Mandatory)][string[]]$CabUrls
+    )
+
+    $DestinationPath = Resolve-FullPath $DestinationPath
+    New-Item -ItemType Directory -Path (Split-Path -Parent $DestinationPath) -Force | Out-Null
+
+    $localCabRoots = @(
+        (Join-Path $env:TEMP "win11-hyperv-adk"),
+        "C:\ProgramData\Package Cache"
+    )
+
+    foreach ($root in $localCabRoots) {
+        if (-not (Test-Path -LiteralPath $root)) {
+            continue
+        }
+
+        $cabs = Get-ChildItem -LiteralPath $root -Recurse -Filter *.cab -ErrorAction SilentlyContinue
+        foreach ($cab in $cabs) {
+            $extractRoot = Join-Path $env:TEMP ("oscdimg-cab-" + [guid]::NewGuid().ToString("N"))
+            try {
+                $found = Expand-CabAndFindOscdimg -CabPath $cab.FullName -ExtractRoot $extractRoot
+                if ($found) {
+                    Copy-Item -LiteralPath $found.FullName -Destination $DestinationPath -Force
+                    return $DestinationPath
+                }
+            }
+            catch {
+            }
+            finally {
+                Remove-Item -LiteralPath $extractRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    $downloadRoot = Join-Path $env:TEMP "win11-hyperv-oscdimg"
     New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
 
-    if (-not (Test-Path -LiteralPath $installerPath)) {
-        Write-Host "Downloading Windows ADK setup..."
-        Write-Host $DownloadUrl
-        Invoke-WebRequest -Uri $DownloadUrl -OutFile $installerPath -UseBasicParsing
-    }
+    foreach ($url in $CabUrls) {
+        $cabPath = Join-Path $downloadRoot ([IO.Path]::GetFileName(([Uri]$url).AbsolutePath))
+        Write-Host "Downloading oscdimg CAB:"
+        Write-Host $url
+        Invoke-WebRequest -Uri $url -OutFile $cabPath -UseBasicParsing
 
-    Write-Host "Installing Windows ADK Deployment Tools..."
-    $logPath = Join-Path $downloadRoot "adksetup-install.log"
-    $arguments = @(
-        "/installpath",
-        $InstallPath,
-        "/features",
-        "OptionId.DeploymentTools",
-        "/quiet",
-        "/norestart",
-        "/ceip",
-        "off",
-        "/log",
-        $logPath
-    )
-
-    $process = Start-Process -FilePath $installerPath -ArgumentList $arguments -Wait -PassThru
-    if ($process.ExitCode -ne 0) {
-        Write-Host "ADK install log: $logPath"
-        if (Test-Path -LiteralPath $logPath) {
-            Write-Host "Last lines from ADK install log:"
-            Get-Content -LiteralPath $logPath -Tail 40
+        $extractRoot = Join-Path $downloadRoot ([IO.Path]::GetFileNameWithoutExtension($cabPath))
+        try {
+            $found = Expand-CabAndFindOscdimg -CabPath $cabPath -ExtractRoot $extractRoot
+            if ($found) {
+                Copy-Item -LiteralPath $found.FullName -Destination $DestinationPath -Force
+                return $DestinationPath
+            }
         }
-        throw "ADK Deployment Tools install failed with exit code $($process.ExitCode)."
+        finally {
+            Remove-Item -LiteralPath $extractRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
+
+    throw "Could not extract oscdimg.exe from local ADK cache or configured CAB URLs."
 }
 
 $WindowsIsoPath = Resolve-FullPath $WindowsIsoPath
 $OutputIsoPath = Resolve-FullPath $OutputIsoPath
+if ($ExtraFilesPath) {
+    $ExtraFilesPath = Resolve-FullPath $ExtraFilesPath
+    if (-not (Test-Path -LiteralPath $ExtraFilesPath)) {
+        throw "Extra files path was not found: $ExtraFilesPath"
+    }
+}
 try {
     $oscdimg = Find-Oscdimg -ExplicitPath $OscdimgPath
 }
 catch {
-    if (-not $InstallAdkDeploymentTools) {
+    if (-not $DownloadOscdimg) {
         throw
     }
 
-    Install-AdkDeploymentTools -DownloadUrl $AdkDownloadUrl -InstallPath $AdkInstallPath
-    $oscdimg = Find-Oscdimg -ExplicitPath $OscdimgPath
+    $oscdimg = Save-OscdimgOnly -DestinationPath $OscdimgOutputPath -CabUrls $OscdimgCabUrl
 }
 
 if (-not (Test-Path -LiteralPath $WindowsIsoPath)) {
@@ -126,6 +166,7 @@ if (Test-Path -LiteralPath $OutputIsoPath) {
 }
 
 $diskImage = $null
+$stagingRoot = $null
 try {
     $diskImage = Mount-DiskImage -ImagePath $WindowsIsoPath -PassThru
     Start-Sleep -Milliseconds 500
@@ -135,9 +176,30 @@ try {
     }
 
     $sourceRoot = "$($volume.DriveLetter):\"
-    $biosBoot = Join-Path $sourceRoot "boot\etfsboot.com"
-    $uefiNoPromptBoot = Join-Path $sourceRoot "efi\microsoft\boot\efisys_noprompt.bin"
-    $uefiPromptBoot = Join-Path $sourceRoot "efi\microsoft\boot\efisys.bin"
+    $buildRoot = $sourceRoot
+
+    if ($ExtraFilesPath) {
+        $stagingRoot = Join-Path (Split-Path -Parent $OutputIsoPath) ("iso-staging-" + [guid]::NewGuid().ToString("N"))
+        New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
+
+        Write-Host "Copying Windows ISO files to staging folder..."
+        & robocopy.exe $sourceRoot $stagingRoot /E /NFL /NDL /NJH /NJS /NP | Out-Null
+        if ($LASTEXITCODE -ge 8) {
+            throw "robocopy.exe failed while staging Windows ISO files. Exit code: $LASTEXITCODE"
+        }
+
+        Write-Host "Adding extra unattended files to Windows ISO root..."
+        & robocopy.exe $ExtraFilesPath $stagingRoot /E /NFL /NDL /NJH /NJS /NP | Out-Null
+        if ($LASTEXITCODE -ge 8) {
+            throw "robocopy.exe failed while adding extra files. Exit code: $LASTEXITCODE"
+        }
+
+        $buildRoot = $stagingRoot
+    }
+
+    $biosBoot = Join-Path $buildRoot "boot\etfsboot.com"
+    $uefiNoPromptBoot = Join-Path $buildRoot "efi\microsoft\boot\efisys_noprompt.bin"
+    $uefiPromptBoot = Join-Path $buildRoot "efi\microsoft\boot\efisys.bin"
 
     if (-not (Test-Path -LiteralPath $biosBoot)) {
         throw "Missing BIOS boot file: $biosBoot"
@@ -159,7 +221,7 @@ try {
         "-u2",
         "-udfver102",
         "-lWIN11_NOPROMPT",
-        $sourceRoot,
+        $buildRoot,
         $OutputIsoPath
     )
 
@@ -182,5 +244,8 @@ try {
 finally {
     if ($diskImage) {
         Dismount-DiskImage -ImagePath $WindowsIsoPath -ErrorAction SilentlyContinue | Out-Null
+    }
+    if ($stagingRoot) {
+        Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }

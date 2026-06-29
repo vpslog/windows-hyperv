@@ -12,9 +12,8 @@ param(
     [string]$AdminUser = "admin",
     [string]$AdminPassword = "admin",
     [switch]$UseNoPromptIso,
-    [switch]$InstallAdkDeploymentTools,
-    [string]$AdkDownloadUrl = "https://go.microsoft.com/fwlink/?linkid=2120254",
-    [string]$AdkInstallPath = "C:\ADK",
+    [string]$OscdimgPath = "",
+    [switch]$DownloadOscdimg,
     [switch]$DisableSecureBoot
 )
 
@@ -144,27 +143,6 @@ $escapedFirstLogonCommand = ConvertTo-UnattendPlainText $firstLogonCommand
 
 if (-not (Test-Path -LiteralPath $WindowsIsoPath)) {
     throw "Windows ISO was not found: $WindowsIsoPath"
-}
-
-if ($UseNoPromptIso) {
-    $noPromptIsoPath = Join-Path (Split-Path -Parent $AnswerIsoPath) "win11-noprompt.iso"
-    $noPromptScript = Join-Path $PSScriptRoot "New-NoPromptWindowsIso.ps1"
-    if (-not (Test-Path -LiteralPath $noPromptScript)) {
-        throw "No-prompt ISO script was not found: $noPromptScript"
-    }
-
-    $noPromptArgs = @{
-        WindowsIsoPath = $WindowsIsoPath
-        OutputIsoPath = $noPromptIsoPath
-        AdkDownloadUrl = $AdkDownloadUrl
-        AdkInstallPath = $AdkInstallPath
-    }
-    if ($InstallAdkDeploymentTools) {
-        $noPromptArgs.InstallAdkDeploymentTools = $true
-    }
-
-    & $noPromptScript @noPromptArgs
-    $WindowsIsoPath = Resolve-FullPath $noPromptIsoPath
 }
 
 if (-not (Get-Command New-VM -ErrorAction SilentlyContinue)) {
@@ -320,6 +298,29 @@ $autounattend = @"
 
 Set-Content -LiteralPath (Join-Path $answerRoot "Autounattend.xml") -Value $autounattend -Encoding UTF8
 New-IsoImageFromFolder -SourceFolder $answerRoot -DestinationIso $AnswerIsoPath
+
+if ($UseNoPromptIso) {
+    $noPromptIsoPath = Join-Path (Split-Path -Parent $AnswerIsoPath) "win11-noprompt.iso"
+    $noPromptScript = Join-Path $PSScriptRoot "New-NoPromptWindowsIso.ps1"
+    if (-not (Test-Path -LiteralPath $noPromptScript)) {
+        throw "No-prompt ISO script was not found: $noPromptScript"
+    }
+
+    $noPromptArgs = @{
+        WindowsIsoPath = $WindowsIsoPath
+        OutputIsoPath = $noPromptIsoPath
+        ExtraFilesPath = $answerRoot
+    }
+    if ($OscdimgPath) {
+        $noPromptArgs.OscdimgPath = $OscdimgPath
+    }
+    if ($DownloadOscdimg) {
+        $noPromptArgs.DownloadOscdimg = $true
+    }
+
+    & $noPromptScript @noPromptArgs
+    $WindowsIsoPath = Resolve-FullPath $noPromptIsoPath
+}
 
 New-VHD -Path $vhdPath -SizeBytes $VhdSizeBytes -Dynamic | Out-Null
 New-VM -Name $VmName -Generation 2 -MemoryStartupBytes $MemoryStartupBytes -VHDPath $vhdPath -Path $vmPath -SwitchName $SwitchName | Out-Null

@@ -2,10 +2,10 @@
 param(
     [string]$VmName = "Win11-Auto",
     [string]$WindowsIsoPath = ".\win11.iso",
+    [string]$ExtraFilesPath = ".\out\answer-files",
     [switch]$UseNoPromptIso,
-    [switch]$InstallAdkDeploymentTools,
-    [string]$AdkDownloadUrl = "https://go.microsoft.com/fwlink/?linkid=2120254",
-    [string]$AdkInstallPath = "C:\ADK",
+    [string]$OscdimgPath = "",
+    [switch]$DownloadOscdimg,
     [switch]$DisableSecureBoot
 )
 
@@ -42,11 +42,16 @@ if ($UseNoPromptIso) {
     $noPromptArgs = @{
         WindowsIsoPath = $WindowsIsoPath
         OutputIsoPath = $noPromptIsoPath
-        AdkDownloadUrl = $AdkDownloadUrl
-        AdkInstallPath = $AdkInstallPath
     }
-    if ($InstallAdkDeploymentTools) {
-        $noPromptArgs.InstallAdkDeploymentTools = $true
+    $resolvedExtraFilesPath = Resolve-FullPath $ExtraFilesPath
+    if (Test-Path -LiteralPath (Join-Path $resolvedExtraFilesPath "Autounattend.xml")) {
+        $noPromptArgs.ExtraFilesPath = $resolvedExtraFilesPath
+    }
+    if ($OscdimgPath) {
+        $noPromptArgs.OscdimgPath = $OscdimgPath
+    }
+    if ($DownloadOscdimg) {
+        $noPromptArgs.DownloadOscdimg = $true
     }
 
     & $noPromptScript @noPromptArgs

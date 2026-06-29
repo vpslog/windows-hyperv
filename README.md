@@ -53,10 +53,10 @@ Remove-VM -Name Win11-Auto -Force
 .\scripts\Repair-Win11HyperVBoot.ps1 -VmName Win11-Auto -WindowsIsoPath ".\win11.iso" -DisableSecureBoot
 ```
 
-如果仍然是 `The boot loader failed`，很可能是 Hyper-V Gen2 没接到 Windows ISO 的 `Press any key to boot from CD or DVD...`。这会影响无人值守启动。安装 Windows ADK 的 Deployment Tools 后，可以生成一个 no-prompt ISO：
+如果仍然是 `The boot loader failed`，很可能是 Hyper-V Gen2 没接到 Windows ISO 的 `Press any key to boot from CD or DVD...`。这会影响无人值守启动。可以生成一个 no-prompt ISO：
 
 ```powershell
-.\scripts\New-NoPromptWindowsIso.ps1 -WindowsIsoPath ".\win11.iso" -OutputIsoPath ".\out\win11-noprompt.iso"
+.\scripts\New-NoPromptWindowsIso.ps1 -WindowsIsoPath ".\win11.iso" -OutputIsoPath ".\out\win11-noprompt.iso" -ExtraFilesPath ".\out\answer-files"
 .\scripts\Repair-Win11HyperVBoot.ps1 -VmName Win11-Auto -WindowsIsoPath ".\out\win11-noprompt.iso" -DisableSecureBoot
 ```
 
@@ -72,18 +72,26 @@ Remove-VM -Name Win11-Auto -Force
 .\scripts\New-Win11HyperV.ps1 -UseNoPromptIso
 ```
 
-如果本机没有 `oscdimg.exe`，脚本可以自动安装 ADK Deployment Tools 后再生成 no-prompt ISO。请在管理员 PowerShell 中运行：
+使用 `New-Win11HyperV.ps1 -UseNoPromptIso` 时，脚本会先生成 `Autounattend.xml`，再把它和 `init\firstlogon.ps1` 直接合进 Windows 安装 ISO 根目录。这样 Windows Setup 一启动就能读取无人值守文件，不会停在语言选择页面。
+
+脚本会自动查找常见位置里的 `oscdimg.exe`，包括 `C:\ADK` 和 Windows Kits 目录。如果已经安装过 ADK Deployment Tools，通常不需要指定路径。
+
+如果脚本找不到，但你知道 `oscdimg.exe` 的位置，可以手动传入：
 
 ```powershell
-.\scripts\New-Win11HyperV.ps1 -UseNoPromptIso -InstallAdkDeploymentTools
+.\scripts\New-Win11HyperV.ps1 -UseNoPromptIso -OscdimgPath "C:\ADK\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
 ```
 
-默认会把 ADK Deployment Tools 安装到 `C:\ADK`，并使用 Windows 10 2004 ADK 下载入口。只需要其中的 `oscdimg.exe`，不是完整安装所有 ADK 组件。
-
-修复现有 VM 时也可以自动安装：
+如果没有 `oscdimg.exe`，也可以让脚本只下载/提取这个工具文件到 `out\tools\oscdimg.exe`，不安装 ADK：
 
 ```powershell
-.\scripts\Repair-Win11HyperVBoot.ps1 -VmName Win11-Auto -WindowsIsoPath ".\win11.iso" -UseNoPromptIso -InstallAdkDeploymentTools
+.\scripts\New-Win11HyperV.ps1 -UseNoPromptIso -DownloadOscdimg
+```
+
+修复现有 VM 时也可以指定：
+
+```powershell
+.\scripts\Repair-Win11HyperVBoot.ps1 -VmName Win11-Auto -WindowsIsoPath ".\win11.iso" -UseNoPromptIso -OscdimgPath "C:\ADK\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
 ```
 
 如果安装过程停在系统版本选择页面，可以先查看 ISO 内的镜像索引，再指定正确的索引重新运行：
